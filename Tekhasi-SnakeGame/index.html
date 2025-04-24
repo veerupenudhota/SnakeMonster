@@ -1,0 +1,284 @@
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veeru'$-Game</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #d2dfce;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Bubblegum Sans', cursive;
+      position: relative;
+      flex-direction: column;
+    }
+
+    canvas {
+      border: 2px solid #1339a18a;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .game-over-box {
+      position: absolute;
+      width: 280px;
+      height: 120px;
+      background: linear-gradient(135deg, #ff6ec4, #7873f5, #00c9ff);
+      border: 3px dashed #222;
+      border-radius: 12px;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 25px rgba(0, 0, 0, 0.7);
+      flex-direction: column;
+      z-index: 10;
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%, -60%) scale(0.9); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+
+    .game-over-title {
+      font-family: 'Bernard MT Condensed', sans-serif;
+      font-size: 26px;
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+
+    .game-over-text {
+      font-family: 'Bernard MT Condensed', sans-serif;
+      font-size: 25px;
+      color: #681212;
+    }
+
+    #restartBtn {
+      margin-top: 12px;
+      padding: 8px 16px;
+      font-size: 18px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <audio id="gameMusic" loop preload="auto">
+    <source src="audio/K-391 & Alan Walker - Ignite (feat. Julie Bergan & Seungri).mp3" type="audio/mp3">
+  </audio>
+
+  <audio id="gameOverTune" preload="auto">
+    <source src="audio/supero.mp3.mp3" type="audio/mp3">
+  </audio>
+
+  <div class="game-over-box" id="gameOverBox">
+    <div class="game-over-title">Game Over</div>
+    <div class="game-over-text">Antha Ipoindhi Rest Theesko</div>
+    <button id="restartBtn">Restart</button>
+  </div>
+
+  <canvas id="gameCanvas" width="500" height="500"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const gameOverBox = document.getElementById("gameOverBox");
+    const gameMusic = document.getElementById("gameMusic");
+    const gameOverTune = document.getElementById("gameOverTune");
+    const restartBtn = document.getElementById("restartBtn");
+
+    const unitSize = 20;
+    const rows = canvas.height / unitSize;
+    const cols = canvas.width / unitSize;
+
+    let snake, direction, food, score, hue, isGameOver, game;
+    let highScore = localStorage.getItem("snakeHighScore") || 0;
+
+    function initializeGame() {
+      snake = [{ x: 100, y: 100 }];
+      direction = "RIGHT";
+      food = randomFood();
+      score = 0;
+      hue = 0;
+      isGameOver = false;
+      gameOverBox.style.display = "none";
+      fadeAudio(gameOverTune, 0, 200);
+      gameMusic.currentTime = 0;
+      gameMusic.volume = 0.5;
+      gameMusic.play();
+
+      if (game) clearInterval(game);
+      game = setInterval(() => {
+        if (!isGameOver) {
+          moveSnake();
+          draw();
+        }
+      }, 120);
+    }
+
+    gameMusic.volume = 0.5;
+    gameOverTune.volume = 1.0;
+
+    window.onload = () => {
+      document.addEventListener("click", () => {
+        gameMusic.play();
+        gameOverTune.play();
+        gameOverTune.pause();
+      }, { once: true });
+
+      initializeGame();
+    };
+
+    restartBtn.addEventListener("click", initializeGame);
+    document.addEventListener("keydown", changeDirection);
+
+    let touchStartX, touchStartY;
+    canvas.addEventListener("touchstart", (e) => {
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+    });
+
+    canvas.addEventListener("touchend", (e) => {
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0 && direction !== "LEFT") direction = "RIGHT";
+        else if (dx < 0 && direction !== "RIGHT") direction = "LEFT";
+      } else {
+        if (dy > 0 && direction !== "UP") direction = "DOWN";
+        else if (dy < 0 && direction !== "DOWN") direction = "UP";
+      }
+    });
+
+    function randomFood() {
+      let newFood;
+      let overlap = true;
+      while (overlap) {
+        newFood = {
+          x: Math.floor(Math.random() * cols) * unitSize,
+          y: Math.floor(Math.random() * rows) * unitSize
+        };
+        const onSnake = snake.some(part => part.x === newFood.x && part.y === newFood.y);
+        const inScoreZone = newFood.y < 80;
+        overlap = onSnake || inScoreZone;
+      }
+      return newFood;
+    }
+
+    function draw() {
+      hue = (hue + 2) % 360;
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, `hsl(${hue}, 100%, 70%)`);
+      gradient.addColorStop(0.5, `hsl(${(hue + 60) % 360}, 100%, 60%)`);
+      gradient.addColorStop(1, `hsl(${(hue + 120) % 360}, 100%, 50%)`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "DarkBlue";
+      ctx.font = "bold 34px 'Bernard MT Condensed', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Snake Monstar (veeru) ", canvas.width / 2, 30);
+
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(food.x + unitSize / 2, food.y + unitSize / 2, unitSize / 2, 0, 2 * Math.PI);
+      ctx.fill();
+
+      snake.forEach((part, index) => {
+        ctx.fillStyle = `hsl(${(index * 40 + hue) % 360}, 100%, 60%)`;
+        ctx.beginPath();
+        ctx.arc(part.x + unitSize / 2, part.y + unitSize / 2, unitSize / 2, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "white";
+        ctx.stroke();
+      });
+
+      ctx.fillStyle = "darkmagenta";
+      ctx.font = "32px 'Impact', cursive";
+      ctx.textAlign = "left";
+      ctx.fillText(`Score: ${score}`, 15, 65);
+      ctx.fillText(`High Score: ${highScore}`, 15, 95);
+    }
+
+    function moveSnake() {
+      const head = { ...snake[0] };
+      if (direction === "LEFT") head.x -= unitSize;
+      if (direction === "RIGHT") head.x += unitSize;
+      if (direction === "UP") head.y -= unitSize;
+      if (direction === "DOWN") head.y += unitSize;
+      snake.unshift(head);
+
+      if (head.x === food.x && head.y === food.y) {
+        score++;
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem("snakeHighScore", highScore);
+        }
+        food = randomFood();
+      } else {
+        snake.pop();
+      }
+
+      checkCollision();
+    }
+
+    function changeDirection(e) {
+      const key = e.key;
+      if (key === "ArrowLeft" && direction !== "RIGHT") direction = "LEFT";
+      if (key === "ArrowRight" && direction !== "LEFT") direction = "RIGHT";
+      if (key === "ArrowUp" && direction !== "DOWN") direction = "UP";
+      if (key === "ArrowDown" && direction !== "UP") direction = "DOWN";
+    }
+
+    function fadeAudio(audio, toVolume, duration) {
+      const fromVolume = audio.volume;
+      const step = (toVolume - fromVolume) / (duration / 50);
+      const fade = setInterval(() => {
+        audio.volume += step;
+        if ((step < 0 && audio.volume <= toVolume) || (step > 0 && audio.volume >= toVolume)) {
+          audio.volume = toVolume;
+          clearInterval(fade);
+        }
+      }, 50);
+    }
+
+    function checkCollision() {
+      const head = snake[0];
+      if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+        gameOver();
+      }
+      for (let i = 1; i < snake.length; i++) {
+        if (head.x === snake[i].x && head.y === snake[i].y) {
+          gameOver();
+        }
+      }
+    }
+
+    function gameOver() {
+      clearInterval(game);
+      isGameOver = true;
+      gameOverBox.style.display = "flex";
+      fadeAudio(gameMusic, 0, 400);
+      gameOverTune.currentTime = 0;
+      fadeAudio(gameOverTune, 1, 400);
+      gameOverTune.play();
+    }
+  </script>
+</body>
+</html>
